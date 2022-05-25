@@ -103,7 +103,7 @@ def un_cheval(ma_ligne : int, keep_running, Nb_process,positions) : # ma_ligne c
             move_to(ma_ligne+1,col) # pour effacer toute ma ligne
             erase_line_from_beg_to_curs()
             en_couleur(lyst_colors[ma_ligne%len(lyst_colors)])
-            print('('+chr(ord('A')+ma_ligne)+'>')
+            print(',-(|'+chr(ord('A')+ma_ligne)+'|*>')
             positions[ma_ligne]=col
 
         col+=1
@@ -132,7 +132,7 @@ def arbitre(Nb_process : int, keep_running,positions):
             if min(positions)!=99:
 
                 cheval_bot=np.argmin(positions)
-                
+
             move_to(Nb_process+5, 1)
             erase_line_from_beg_to_curs()
             en_couleur(lyst_colors[0])
