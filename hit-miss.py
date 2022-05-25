@@ -13,9 +13,9 @@ def frequence_de_hits_pour_n_essais(nb_iteration):
 if __name__ == '__main__':
     compteur = mp.Value('i',0)
     # Nombre d’essai pour l’estimation
-    nb_total_iteration = 30000000
+    nb_total_iteration = 10000000
     #Nombre de processus
-    N = 5
+    N = 10
     time1 = time.time()
     for i in range(N):
         if os.fork() == 0:
@@ -30,6 +30,4 @@ if __name__ == '__main__':
     total_hits = compteur.value   
     time2 = time.time()
     print("Valeur estimée Pi par la méthode " + str(N) + "−Processus : ", 4 *total_hits / nb_total_iteration)
-    print("Temps de calcul:", time2-time1)
-    #TRACE :
-    # Calcul Mono−Processus : Valeur estimée Pi par la méthode Mono−Processus : 3.1412604
+    print("Temps de calcul:", round(time2-time1,3), "secondes")
