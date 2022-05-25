@@ -74,6 +74,7 @@ CL_LIGHTCYAN="\033[01;36m" # Cyan clair
 CL_WHITE="\033[01;37m" # Blanc
 #−−−−−−−−−−−−−−−−−−−−−−−−−−−−−−−−−−−−−−−−−−−−−−−−−−−−−−−
 import multiprocessing as mp
+import numpy as np
 import os, time,math, random, sys, ctypes
 
 # Une liste de couleurs à affecter aléatoirement aux chevaux
@@ -87,29 +88,58 @@ def move_to(lig, col) : print("\033[" + str(lig) + ";" + str(col) + "f",end='')
 def en_couleur(Coul) : print(Coul,end='')
 def en_rouge() : print(CL_RED,end='') # Un exemple !
 
+#Verrou pour l'exclusion mutuelle
+verrou_print=mp.Lock()
+verrou_fin=mp.Lock()
 # La tache d'un cheval
-def un_cheval(ma_ligne : int, keep_running) : # ma_ligne commence à 0
+def un_cheval(ma_ligne : int, keep_running, Nb_process,positions) : # ma_ligne commence à 0
     col=1
     while col < LONGEUR_COURSE and keep_running.value :
-        move_to(ma_ligne+1,col) # pour effacer toute ma ligne
-        erase_line_from_beg_to_curs()
-        en_couleur(lyst_colors[ma_ligne%len(lyst_colors)])
-        print('('+chr(ord('A')+ma_ligne)+'>')
+        with verrou_print:
+            move_to(ma_ligne+1,col) # pour effacer toute ma ligne
+            erase_line_from_beg_to_curs()
+            en_couleur(lyst_colors[ma_ligne%len(lyst_colors)])
+            print('('+chr(ord('A')+ma_ligne)+'>')
+            positions[ma_ligne]=col
         col+=1
         time.sleep(0.1 *
         random.randint(1,5))
+    with verrou_fin:
+        Compteur.value+=1
+        if Compteur.value==Nb_process:
+            keep_running.value=False
+
+# La tache du arbitre
+def arbitre(Nb_process : int, keep_running,positions):
+    
+    while keep_running.value :
+        with verrou_print:
+            move_to(Nb_process+5, 1)
+            erase_line_from_beg_to_curs()
+            en_couleur(lyst_colors[0])
+            print('Best : ('+chr(ord('A')+np.argmax(positions))+'>  Worst : ('+chr(ord('A')+np.argmin(positions)) )
+        time.sleep(0.1)
+    with verrou_print:
+        move_to(Nb_process+1, 1)
+        erase_line_from_beg_to_curs()
+        en_couleur(lyst_colors[0])
+        print("fin")
 #−−−−−−−−−−−−−−−−−−−−−−−−−−−−−−−−−−−−−−−−−−−−−−−−
 # La partie principale :
 def course_hippique(keep_running):
     Nb_process=20
+    positions=mp.Array('i',[0 for i in range(Nb_process)])
     mes_process = [0 for i in range(Nb_process)]
     effacer_ecran()
     curseur_invisible()
     for i in range(Nb_process): # Lancer Nb_process processus
-        mes_process[i] = mp.Process(target=un_cheval, args= (i,keep_running,))
+        mes_process[i] = mp.Process(target=un_cheval, args= (i,keep_running,Nb_process,positions,))
         mes_process[i].start()
-    move_to(Nb_process+10, 1)
-    print("tous lancés")
+    arbitre_process=mp.Process(target=arbitre, args=(Nb_process,keep_running,positions,))
+    arbitre_process.start()
+    with verrou_print:
+        move_to(Nb_process+10, 1)
+        print("tous lancés")
     for i in range(Nb_process): mes_process[i].join()
     move_to(24, 1)
     curseur_visible()
@@ -119,4 +149,5 @@ def course_hippique(keep_running):
 if __name__ == "__main__" :
     LONGEUR_COURSE = 100 # Tout le monde aura la même copie (donc no need to have a 'value')
     keep_running=mp.Value(ctypes.c_bool, True)
+    Compteur=mp.Value('i',0)
     course_hippique(keep_running)
