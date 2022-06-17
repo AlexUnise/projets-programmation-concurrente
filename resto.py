@@ -3,117 +3,106 @@ import multiprocessing as mp
 import random as rand 
 import time
 
-def createNServer(n,program,bufferCmde,etat_serveurs, serveur_pointeur, verrouCmde,isNewOrder, isCooking, hasDoneCoking):
-        if n > 0:
-            server_list = []
-            for i in range(n):
-                server_list.append(mp.Process(target=program, args=(i,bufferCmde,etat_serveurs,serveur_pointeur, verrouCmde,isNewOrder, isCooking, hasDoneCoking)))
-            for server in server_list:
-                server.start()
-            return server_list
-        else:
-            print('Le nombre de serveur est incorrect')
-        
-
 
 # ------------------ Client ------------------
-def client_program (bufferCmde, verrouCmde):
-    while True:
-
-        
-        commandes_dispo = ['Big Mac', 'Triple Cheese Burger', 'Sundae', 'CBO']
+def client_program(orderQueue, messageQueue, lockSendMessage):
+    commandes_dispo = ['Big Mac', 'Triple Cheese Burger', 'Sundae', 'CBO']
+    while True:   
         randomCommandeIndex = rand.randint(0,len(commandes_dispo)-1)
-        bufferCmde.append(commandes_dispo[randomCommandeIndex])
-        isNewOrder.set()
-
-
-
-
-
-
-
-
-        #Attente de n secondes avant une nouvelle commande 
+        commande = commandes_dispo[randomCommandeIndex]
+        orderQueue.put(commande)
+        with lockSendMessage:
+            messageQueue.put('La commande "' + commande + '" vient d\'être lancée !')
+        #Attente de x secondes avant de lancer une nouvelle commande
         time.sleep(rand.randint(1,3))
 
-# ------------------ Serveur ------------------
-def serveur_program(idServeur,bufferCmde,etat_serveurs, serveur_pointeur, verrouCmde,isNewOrder, isCooking, hasDoneCoking):
-
-    hasCommande = False
-
-    while True:
-        if isNewOrder and not hasCommande:
-            with verrouCmde:
-                hasCommande = True
-                with verrouEtatServeurs:
-                    etat_serveurs[idServeur]['commande'] = bufferCmde.pop(-1)
-                    with verrouServeurPointeur:
-                        serveur_pointeur.value = idServeur
-                        isCooking.set()
-            time.sleep(rand.randint(1,10))
-            isCooking.clear()
-            with verrouServeurPointeur:
-                serveur_pointeur.value = idServeur
-                hasDoneCoking.set()
-                hasCommande = False
-                etat_serveurs[idServeur]['commande'] = None
-
 
     
-
-
 # ------------------ Major d'Homme ------------------
-def majordhomme_program (bufferCmde, etat_serveurs,serveur_pointeur, verrouCmde,isCooking, hasDoneCoking):
-    if isCooking.is_set():
-        with verrouEtatServeurs:
-            with verrouServeurPointeur:
-                serveurID = serveur_pointeur.value
-                print('Le serveur ', etat_serveurs[serveurID]["id"], " traite la commande ", etat_serveurs[serveurID]["commande"])
-    if hasDoneCoking.is_set():
-        with verrouServeurPointeur:
-                serveurID = serveur_pointeur.value
-                print("Commande ",  etat_serveurs[serveurID]["commande"]  ,"est servie au client")
+def majordhomme_program(messageQueue):
+    while True:
+        message = messageQueue.get()
+        print(message)
 
 
+
+# ------------------ Serveur ------------------
+def server_program(i,orderQueue, messageQueue,lockPickOrderInQueue,lockSendMessage):
+    while True:
+        with lockPickOrderInQueue: #un seul serveur prend une commande dans la file à la fois.
+            commande = orderQueue.get()
+        with lockSendMessage:
+            messageQueue.put("Le serveur n°" + str(i) + " s'occupe de la commande: " + str(commande) + " !") 
+        time.sleep(rand.randint(1,10))
+        with lockSendMessage:
+            messageQueue.put("La commande " + str(commande) + " a été traitée par le serveur n°" + str(i) + " !" )
+            
+class ServersManager:
+    def __init__(self, nb_servers,programToRun,orderQueue, messageQueue,lockPickOrderInQueue,lockSendMessage):
+
+        self.nb_servers = nb_servers
+        self.servers = self.createNServer(programToRun,orderQueue, messageQueue,lockPickOrderInQueue,lockSendMessage)
+        
 
     
+    def createNServer(self,programToRun,orderQueue, messageQueue,lockPickOrderInQueue,lockSendMessage):
+        servers = []
+        if self.nb_servers > 0:
+            for i in range(self.nb_servers):
+                servers.append(mp.Process(target=programToRun, args=(i,orderQueue,messageQueue,lockPickOrderInQueue,lockSendMessage))) 
+            return servers
+        else:
+            print('Le nombre de serveur est incorrect')
 
-    
+    def start(self):
+        for server in self.servers:
+            server.start()
+    def join(self):
+        for server in self.servers:
+            server.join()
 
 
 
 
 if __name__ == '__main__':
-    #Création du tampon de commandes
-    bufferCmde = mp.Manager().list()
-    verrouCmde = mp.Lock()
 
-    #Evenements
-    isNewOrder = mp.Manager().Event()
-    isCooking = mp.Manager().Event()
-    hasDoneCoking = mp.Manager().Event()
+    #Création de la fin d'attente des commandes 
+    orderQueue = mp.Queue()
 
-    #Liste d'état des serveurs
-    etat_serveurs= mp.Manager().list()
-    verrouEtatServeurs = mp.Lock()
-    
-    #Pointeur de serveur
-    serveur_pointeur = mp.Value('i', 0)
-    verrouServeurPointeur = mp.Lock()
+    #Création de la fin d'attente des messages affiché par le major d'homme
+    messageQueue = mp.Queue()
 
-    
-    s = 5
+    #Création des verrous de modification de la file d'attente de commande et d'envoi es messages des serveurs au major d'homme
+    lockPickOrderInQueue = mp.Lock()
+    lockSendMessage = mp.Lock()
 
-    client = mp.Process(target=client_program, args=(bufferCmde,verrouCmde))
+
+    #Création du client
+    client = mp.Process(target=client_program, args=(orderQueue,messageQueue, lockSendMessage))
+
+    #Création des serveurs
+    n = 5 #nombre de serveurs
+    gestionnaireDesServeurs = ServersManager(n,server_program,orderQueue, messageQueue,lockPickOrderInQueue,lockSendMessage)
+
+    #Création du major d'homme
+    majorDHomme = mp.Process(target=majordhomme_program , args=(messageQueue,))
+
+
+    #On demarre tous les processus !
     client.start()
-
+    gestionnaireDesServeurs.start()
+    majorDHomme.start()
     
-    etat_serveurs = [{"id": x, "command": None} for x in range(s)]
-    serveurs = createNServer(s,serveur_program,bufferCmde, etat_serveurs, serveur_pointeur, verrouCmde, isNewOrder, isCooking, hasDoneCoking) #créer et start les serveurs
+
+    client.join()
+    gestionnaireDesServeurs.join()
+    majorDHomme.join()
+    
 
 
-    majorDhomme = mp.Process(target=majordhomme_program, args=(bufferCmde, etat_serveurs, serveur_pointeur, verrouCmde, isCooking, hasDoneCoking))
-    majorDhomme.start()
+
+
+ 
     
 
 
