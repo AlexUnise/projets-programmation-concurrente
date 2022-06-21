@@ -105,7 +105,7 @@ def update_cheval(ma_ligne,col,Taille_cheval):
 verrou_print=mp.Lock()
 verrou_fin=mp.Lock()
 # La tache d'un cheval
-def un_cheval(ma_ligne : int, keep_running, Nb_process,positions,Taille_cheval) : # ma_ligne commence à 0
+def un_cheval(ma_ligne : int, keep_running, Nb_process,positions,Taille_cheval,LONGEUR_COURSE,Compteur) : # ma_ligne commence à 0
 
     col=1
 
@@ -172,7 +172,7 @@ def arbitre(Nb_process : int, keep_running,positions, pari,Taille_cheval):
 
 #−−−−−−−−−−−−−−−−−−−−−−−−−−−−−−−−−−−−−−−−−−−−−−−−
 # La partie principale :
-def course_hippique(keep_running,Taille_cheval):
+def course_hippique(keep_running,Taille_cheval,LONGEUR_COURSE):
 
     Nb_process=5
     positions=mp.Array('i',[0 for i in range(Nb_process)])
@@ -183,7 +183,7 @@ def course_hippique(keep_running,Taille_cheval):
 
     for i in range(Nb_process): # Lancer Nb_process processus
 
-        mes_process[i] = mp.Process(target=un_cheval, args= (i,keep_running,Nb_process,positions,Taille_cheval,))
+        mes_process[i] = mp.Process(target=un_cheval, args= (i,keep_running,Nb_process,positions,Taille_cheval,LONGEUR_COURSE,Compteur,))
         mes_process[i].start()
 
     arbitre_process=mp.Process(target=arbitre, args=(Nb_process,keep_running,positions,pari,Taille_cheval,))
@@ -203,4 +203,4 @@ if __name__ == "__main__" :
     Taille_cheval=3#Nombre de lignes pour chaque cheval
     keep_running=mp.Value(ctypes.c_bool, True)
     Compteur=mp.Value('i',0)
-    course_hippique(keep_running,Taille_cheval)
+    course_hippique(keep_running,Taille_cheval,LONGEUR_COURSE)
